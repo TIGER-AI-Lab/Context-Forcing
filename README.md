@@ -4,7 +4,7 @@
 
 Official implementation of Context Forcing: Consistent Autoregressive Video Generation with Long Context
 
-[Shuo Chen*](https://chenshuo20.github.io/), [Cong Wei*](https://congwei1230.github.io/), [Sun Sun](https://scholar.google.com/citations?user=2X_jP6kAAAAJ&hl=en), Ping Nie, Kai Zhou, [Ge Zhang](https://scholar.google.com/citations?user=qyTrq4kAAAAJ&hl=zh-CN), [Ming-Hsuan Yang](https://faculty.ucmerced.edu/mhyang/), [Wenhu Chen](https://wenhuchen.github.io/)
+[Shuo Chen*](https://chenshuo20.github.io/), [Cong Wei*](https://congwei1230.github.io/), [Sun Sun](https://scholar.google.com/citations?user=2X_jP6kAAAAJ&hl=en), [Ping Nie](https://github.com/erenup), Kai Zhou, [Ge Zhang](https://scholar.google.com/citations?user=qyTrq4kAAAAJ&hl=zh-CN), [Ming-Hsuan Yang](https://faculty.ucmerced.edu/mhyang/), [Wenhu Chen](https://wenhuchen.github.io/)
 
 
 Abstract: *Recent approaches to real-time long video generation typically employ streaming tuning strategies, attempting to train a long-context student using a short-context (memoryless) teacher. In these frameworks, the student performs long rollouts but receives supervision from a teacher limited to short 5-second windows. This structural discrepancy creates a critical **student-teacher mismatch**: the teacher's inability to access long-term history prevents it from guiding the student on global temporal dependencies, effectively capping the student's context length.
