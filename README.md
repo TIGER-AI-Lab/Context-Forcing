@@ -51,5 +51,13 @@ We would like to thank the following work for their exceptional effort.
 If you find this codebase useful for your research, please kindly cite our paper:
 
 ```bibtex
-
+@misc{chen2026contextforcingconsistentautoregressive,
+      title={Context Forcing: Consistent Autoregressive Video Generation with Long Context}, 
+      author={Shuo Chen and Cong Wei and Sun Sun and Ping Nie and Kai Zhou and Ge Zhang and Ming-Hsuan Yang and Wenhu Chen},
+      year={2026},
+      eprint={2602.06028},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2602.06028}, 
+}
 ```
