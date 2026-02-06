@@ -1,6 +1,6 @@
 # Context Forcing: Consistent Autoregressive Video Generation with Long Context
 
-[**Paper**](https://arxiv.org/) | [**Project Page**](https://chenshuo20.github.io/Context_Forcing/) 
+[**Paper**](https://arxiv.org/abs/2602.06028) | [**Project Page**](https://chenshuo20.github.io/Context_Forcing/) 
 
 Official implementation of Context Forcing: Consistent Autoregressive Video Generation with Long Context
 
