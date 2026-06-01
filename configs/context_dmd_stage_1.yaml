@@ -1,0 +1,101 @@
+generator_ckpt: checkpoints/context_mix_ode_init.pt # /home/c58wei/scratch/worldmodel/Self-Forcing/checkpoints/checkpoints/ode_init.pt
+# resume_checkpoint_path: /map-vepfs/shuochen/Context-Forcing/logs/context_dmd_stage_1_0313/checkpoint_model_000400
+generator_fsdp_wrap_strategy: size
+real_score_fsdp_wrap_strategy: size
+fake_score_fsdp_wrap_strategy: size
+real_name: Wan2.1-T2V-1.3B 
+fake_name: Wan2.1-T2V-1.3B 
+fake_model_type: full
+text_encoder_fsdp_wrap_strategy: size
+denoising_step_list:
+- 1000
+- 750
+- 500
+- 250
+warp_denoising_step: true # need to remove - 0 in denoising_step_list if warp_denoising_step is true
+ts_schedule: false
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 3.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 1646
+wandb_host: WANDB_HOST
+wandb_key: WANDB_KEY
+wandb_entity: WANDB_ENTITY
+wandb_project: WANDB_PROJECT
+sharding_strategy: hybrid_full
+lr: 2e-06
+lr_critic: 4e-07 # if use lora, then lr should be 1.0e-05
+beta1: 0.9
+beta2: 0.999
+beta1_critic: 0.5
+beta2_critic: 0.95
+max_grad_norm_generator: 2.0
+max_grad_norm_critic: 2.0
+fake_pretrain_steps: 0 # train fake model for 10 steps
+warmup_steps: 0
+data_path: prompts/vidprom_filtered_extended.txt
+batch_size: 1
+gradient_accumulate: 8
+ema_weight: 0.99
+ema_start_step: 200
+total_batch_size: 64
+log_iters: 100
+max_step: 2001
+negative_prompt: "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+dfake_gen_update_ratio: 5
+image_or_video_shape:
+- 1
+- 21
+- 16
+- 60
+- 104
+distribution_loss: dmd
+trainer: score_distillation
+gradient_checkpointing: true
+num_frame_per_block: 3
+load_raw_video: false
+model_kwargs:
+  timestep_shift: 5.0
+  local_attn_size: 6 # 12 local latent
+  sink_size: 3
+  rope_length: 21
+  cache_size: 21
+  keyframe_interval: 0
+  num_new_context_tokens: 1 # sink_size + num_new_context_tokens + local_attn_size = cache_size
+  keyframe_sample: sim
+num_training_frames: 21 # 20s for 84, 30s for 105, 40s for 126
+num_min_training_frames: 21 # at least 10s video roll out, 42 latent
+real_score_length: 21 # if use longcat, real score is 24 length; wanx for 21
+context_window: 0
+context_switch_step: 0
+stage2_start_step: 0
+stage2_full_step: 0  
+p_ctx_min: 0
+p_ctx_max: 0   
+initial_bias_exponent: 3
+context_noise: 0
+vis_per_step: 10
+R_eval_interval: 0
+save_optimizer: true
+long: false
+teacher_forcing: false
+training:
+  use_amp: false
+text_encoder_cpu_offload: true
+real_score_cpu_offload: false
+fake_score_cpu_offload: false
+generator_score_cpu_offload: false
+return_attn_map: false
+i2v: false
+context_teacher: false
+context_fake: false
+context_teacher_path: stable_video_infinity/ckpts/diffusion_pytorch_model.safetensors 
+fake_context_teacher_path: stable_video_infinity/ckpts/diffusion_pytorch_model.safetensors
+camera_prompt: ""
+all_fully_denoised: true
+# svi_model: # svi lora model
+#   model_type: Wan2.1-T2V-1.3B
+#   lora_path: /map-vepfs/shuochen/Long_video/stable_video_infinity/ckpts/lora_weights.safetensors
+#   lora_alpha: 1.0

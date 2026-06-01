@@ -1,0 +1,38 @@
+*.pt
+*.pth
+*.ckpt
+checkpoints/
+ckpts/
+weights/
+# models/
+
+results/
+outputs/
+videos/
+*.mp4
+*.png
+*.jpg
+
+logs/
+*.log
+*.tensorboard
+
+__pycache__/
+*.py[cod]
+
+.ipynb_checkpoints/
+
+.vscode/
+
+.venv/
+env/
+*.env
+
+.cache
+wan_models/
+prompts/vidprom_filtered_extended.txt
+
+# train.sh
+# inference.sh
+*_log.txt
+context_teacher/models/train/
