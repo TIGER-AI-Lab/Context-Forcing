@@ -318,6 +318,7 @@ class WanDiffusionWrapper(torch.nn.Module):
         cache_start: Optional[int] = None,
         noise_model: Optional[bool] = False,
         context_model: Optional[bool] = False,
+        context_length: Optional[int] = None,
         mode="base"
     ) -> torch.Tensor:
         prompt_embeds = conditional_dict["prompt_embeds"]
@@ -388,18 +389,21 @@ class WanDiffusionWrapper(torch.nn.Module):
                     ).permute(0, 2, 1, 3, 4)
 
         if noise_model:
-            print("use noise model")
             pred_x0 = self._convert_noise_pred_to_x0(
                 noise_pred=flow_pred.flatten(0, 1),
                 xt=noisy_image_or_video.flatten(0, 1),
                 timestep=timestep.flatten(0, 1)
             ).unflatten(0, flow_pred.shape[:2])
         elif context_model:
+            assert context_length is not None, (
+                "context_length must be provided when context_model=True; "
+                "pass the number of clean context frames prepended to the sequence."
+            )
             pred_x0 = self._convert_flow_pred_to_x0_context(
-                flow_pred=flow_pred,            
-                xt=noisy_image_or_video,        
-                timestep=timestep,              
-                context_length=flow_pred.shape[1]//2
+                flow_pred=flow_pred,
+                xt=noisy_image_or_video,
+                timestep=timestep,
+                context_length=context_length,
             )
         else:
             pred_x0 = self._convert_flow_pred_to_x0(

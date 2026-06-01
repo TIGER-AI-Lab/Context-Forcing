@@ -22,7 +22,6 @@ from tqdm import tqdm
 import time
 import os
 import math
-import random
 from torch.optim.lr_scheduler import LambdaLR
 
 
@@ -131,16 +130,6 @@ class Trainer:
                     weight_decay=config.weight_decay
                 )
 
-        # NEW 8-bit generator_optimizer
-        # self.generator_optimizer = bnb_optim.AdamW8bit(
-        #     [param for param in self.model.generator.parameters()
-        #     if param.requires_grad],
-        #     lr=config.lr,
-        #     betas=(config.beta1, config.beta2),
-        #     weight_decay=config.weight_decay
-        # )
-
-        # Previous critic_optimizer (for reference)
         self.critic_optimizer = torch.optim.AdamW(
                     [param for param in self.model.fake_score.parameters()
                      if param.requires_grad],
@@ -148,15 +137,6 @@ class Trainer:
                     betas=(config.beta1_critic, config.beta2_critic),
                     weight_decay=config.weight_decay
                 )
-
-        # NEW 8-bit critic_optimizer
-        # self.critic_optimizer = bnb_optim.AdamW8bit(
-        #     [param for param in self.model.fake_score.parameters()
-        #     if param.requires_grad],
-        #     lr=config.lr_critic if hasattr(config, "lr_critic") else config.lr,
-        #     betas=(config.beta1_critic, config.beta2_critic),
-        #     weight_decay=config.weight_decay
-        # )
 
         # Step 3: Initialize the dataloader
         if self.config.long:
@@ -244,21 +224,6 @@ class Trainer:
         self.R_scale_floor = 0.5    
         self.R_scale_ceiling = 1.0 
         self.R_rel_margin = 0.0 
-
-    def _p_ctx_schedule(self, step: int) -> float:
-        stage2_start = int(self.config.get("stage2_start_step", 150)) 
-        stage2_full  = int(self.config.get("stage2_full_step", 260)) 
-
-        p_min = float(self.config.get("p_ctx_min", 0.3))  
-        p_max = float(self.config.get("p_ctx_max", 0.7))  
-
-        if step < stage2_start:
-            return 0.0 
-        if step >= stage2_full:
-            return p_max 
-
-        alpha = (step - stage2_start) / max(1, (stage2_full - stage2_start))
-        return p_min + (p_max - p_min) * alpha
 
     def save(self):
         """
@@ -459,7 +424,6 @@ class Trainer:
                 image_or_video_shape=image_or_video_shape,
                 conditional_dict=conditional_dict,
                 unconditional_dict=unconditional_dict,
-                clean_latent=clean_latent,
                 initial_latent=image_latent if self.config.i2v else None,
                 step=self.step,
             )
@@ -519,7 +483,6 @@ class Trainer:
             image_or_video_shape=image_or_video_shape,
             conditional_dict=conditional_dict,
             unconditional_dict=unconditional_dict,
-            clean_latent=clean_latent,
             initial_latent=image_latent if self.config.i2v else None,
             step=self.step,
         )
@@ -579,18 +542,6 @@ class Trainer:
                                     * lr_g * freq_g) / max(1e-12, theta_g)
                             rel_d = (eff_d * lr_d * freq_d * lora_scale) / max(1e-12, theta_d)
                             R_rel = rel_d / max(1e-12, rel_g)
-
-                        # ==== Debug ====
-                        print("---- R computation debug ----")
-                        print(f"lr_g={lr_g:.3e}, lr_d={lr_d:.3e}, lora_scale={lora_scale}")
-                        print(f"freq_g={freq_g}, freq_d={freq_d}")
-                        print(f"raw_g={getattr(self, 'last_raw_g', float('nan')):.6f}, "
-                            f"eff_g={getattr(self, 'last_eff_g', float('nan')):.6f}, "
-                            f"theta_g={getattr(self, 'last_theta_g', float('nan')):.6f}")
-                        print(f"raw_d={raw_d:.6f}, eff_d={eff_d:.6f}, theta_d={theta_d:.6f}")
-                        print(f"R_raw={R_raw:.3f}, R_rel={R_rel:.3f}")
-                        print("-----------------------------")
-                        # =============================
 
                     except Exception as e:
                         print("R debug exception:", e)
@@ -663,8 +614,6 @@ class Trainer:
         batch_size = video_tensor.shape[0]
         del video_tensor
         torch.cuda.empty_cache()
-        # video_latent = self.model.vae.encode_to_latent(video_tensor.to(device=self.device, dtype=torch.bfloat16))
-        print(video_latent.shape)
 
         midpoint_frame = video_latent.shape[1] // 2
         context_latent = video_latent[:, :midpoint_frame]
@@ -697,12 +646,7 @@ class Trainer:
                 image_or_video_shape=image_or_video_shape,
                 conditional_dict=conditional_dict,
                 unconditional_dict=unconditional_dict,
-                clean_latent=clean_latent,
-                context_latent=context_latent,
-                target_latent=target_latent,
                 initial_latent=image_latent if self.config.i2v else None,
-                w_context=True if self.config.long else False,
-                teacher_forcing=True if self.config.teacher_forcing else False,
             )
 
             generator_loss.backward()
@@ -841,7 +785,6 @@ class Trainer:
         fake_pretrain_steps = int(self.config.get("fake_pretrain_steps", 50))
         base_lr_d = self.critic_optimizer.param_groups[0]["lr"]
 
-        start_step = self.step 
         fake_pretrain_steps = int(self.config.get("fake_pretrain_steps", 50))
         warmup_steps_cfg = int(self.config.get("warmup_steps", 0))
         warmup_steps = max(warmup_steps_cfg, fake_pretrain_steps)
@@ -873,41 +816,6 @@ class Trainer:
 
             fake_only_phase = (self.step < fake_pretrain_steps)
 
-            if self.step < 0:
-                TRAIN_GENERATOR = False
-
-            # context_switch_step = self.config.get('context_switch_step', 0)
-            # if context_switch_step > 0:
-            #     chunk_index = self.step // context_switch_step
-            #     if chunk_index % 2 == 1:
-            #         self.model._context_teacher = False
-            #     else:
-            #         self.model._context_teacher = True
-            #     print(f"Current step:{self.step}, context teacher:{self.model._context_teacher}")
-
-            p_ctx = self._p_ctx_schedule(self.step)
-
-            use_context = None
-            if dist.is_available() and dist.is_initialized():
-                flag = torch.zeros(1, dtype=torch.int64, device=self.device)
-
-                if self.is_main_process:
-                    flag[0] = 1 if random.random() < p_ctx else 0
-
-                dist.broadcast(flag, src=0)
-                use_context = bool(flag.item())
-            else:
-                use_context = (random.random() < p_ctx)
-
-            # self.model._context_teacher = use_context
-            # self.model._context_teacher = True
-
-            if self.is_main_process:
-                print(
-                    f"Current step: {self.step}, "
-                    f"p_ctx={p_ctx:.3f}, context_teacher={self.model._context_teacher}"
-                )
-            # ================================================================
 
 
 

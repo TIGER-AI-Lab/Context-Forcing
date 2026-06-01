@@ -274,18 +274,15 @@ class CausalWanSelfAttention(nn.Module):
                         
                         curr_vec = current_k_repr.view(current_k_repr.shape[0], -1)
                         last_vec = last_k_repr.view(last_k_repr.shape[0], -1)
-                        
-                        # import ipdb; ipdb.set_trace()
+
                         sim_score = torch.nn.functional.cosine_similarity(curr_vec, last_vec, dim=1).mean()
                         threshold = getattr(self, "sim_threshold", 0.95)
-                        # print(f"sim {sim_score}, current_start_frame {current_start_frame}")
-                        
+
                         if sim_score < threshold:
                             is_keyframe = True
                             kv_cache["last_saved_k_repr"] = current_k_repr
-                            # print(f"Save new kv")
                         else:
-                            is_keyframe = False 
+                            is_keyframe = False
             else:
                 # uniform sample
                 # check if need to save the frame; save 1 latent at every 6 latents
@@ -337,17 +334,15 @@ class CausalWanSelfAttention(nn.Module):
                 if actual_len > 0:
                     dst_slice = slice(shift_dst_start, shift_dst_start + actual_len)
                     src_slice = slice(shift_src_start, shift_src_start + actual_len)
-                    
+
                     kv_cache["k"][:, dst_slice] = kv_cache["k"][:, src_slice].clone()
                     kv_cache["v"][:, dst_slice] = kv_cache["v"][:, src_slice].clone()
-                    # print(f"Moving {src_slice.start/1560}:{src_slice.stop/1560} to {dst_slice.start/1560}:{dst_slice.stop/1560}.")
 
                     fill_len = self.num_new_context_tokens
-                    
+
                     if fill_len > 0:
                         kv_cache["k"][:, context_token_max_end - self.num_new_context_tokens:context_token_max_end] = raw_key[:, :fill_len, ...]
                         kv_cache["v"][:, context_token_max_end - self.num_new_context_tokens:context_token_max_end] = v[:, :fill_len, ...]
-                        # print(f"Fill [{shift_src_start/1560}, {shift_src_start/1560 + fill_len/1560}]")
 
                     # local_end_index_prev += self.num_new_context_tokens
                     shift_src_frame_start = shift_src_start // frame_seqlen
@@ -494,13 +489,8 @@ class CausalWanSelfAttention(nn.Module):
                 calculated_start = target_anchor_frame - (num_attn_frames - 1)
                 calculated_start = max(0, calculated_start)
 
-                # if raw_k_sink.shape[1] > 0:
-                #     sink_frames_count = raw_k_sink.shape[1] // frame_seqlen
-                #     calculated_start = max(sink_frames_count, calculated_start)
-
                 rolling_start_frame = calculated_start
-                
-                # print("rolling_grid_sizes", rolling_grid_sizes, "raw_keys_for_attn shape", raw_keys_for_attn.shape)
+
                 roped_keys_for_attn = causal_rope_apply(
                     raw_keys_for_attn, rolling_grid_sizes, freqs, start_frame=rolling_start_frame
                 ).type_as(v)
@@ -536,7 +526,6 @@ class CausalWanSelfAttention(nn.Module):
                 "dynamic_context_tokens": kv_cache["dynamic_context_tokens"],
                 "token_source_frame": token_src_frame,
                 "last_saved_k_repr": current_k_repr,
-                # "sim_recorder": kv_cache.get("sim_recorder", {})
             }
 
             x = x.flatten(2)
@@ -587,29 +576,6 @@ class CausalWanSelfAttention(nn.Module):
                 kv_cache["k"][:, local_start_index:local_end_index] = roped_key
                 kv_cache["v"][:, local_start_index:local_end_index] = v
             
-            # is_evicting = (self.local_attn_size != -1 and (current_end > kv_cache["global_end_index"].item()) and (
-            #         num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size))
-            
-            # print(f"\n--- Cache Update ---")
-            # print(f"Current Start: {current_start}, Old Global End: {old_global_end}")
-            # print(f"Old Local End: {old_local_end}, Num New Tokens: {num_new_tokens}")
-            # print(f"Cache Size: {kv_cache_size}, Sink Tokens: {sink_tokens}")
-            
-            # if is_evicting:
-            #     print(f"Branch: EVICTION")
-            #     print(f"  Num Rolled: {num_rolled_tokens}")
-            #     print(f"  Rolled Slice: [{sink_tokens} : {sink_tokens + num_rolled_tokens}]")
-            #     print(f"  New Token Slice: [{local_start_index} : {local_end_index}]")
-            # else:
-            #     print(f"Branch: APPEND")
-            #     print(f"  Old Token Slice: [{sink_tokens} : {old_local_end}]")
-            #     print(f"  New Token Slice: [{local_start_index} : {local_end_index}]")
-
-            # attn_start = max(0, local_end_index - self.max_attention_size)
-            # attn_end = local_end_index
-            # print(f"Final Local End: {local_end_index}")
-            # print(f"Attention Slice: [{attn_start} : {attn_end}] (Size: {attn_end - attn_start})")
-            
             x = attention(
                 roped_query,
                 kv_cache["k"][:, max(0, local_end_index - self.max_attention_size):local_end_index],
@@ -622,8 +588,8 @@ class CausalWanSelfAttention(nn.Module):
             # kv_cache["local_end_index"].fill_(local_end_index)
 
             new_kv_cache = {
-                "k": kv_cache["k"] , 
-                "v": kv_cache["v"] , 
+                "k": kv_cache["k"],
+                "v": kv_cache["v"],
                 "global_end_index": new_global_end_index,
                 "local_end_index": new_local_end_index
             }
@@ -949,19 +915,8 @@ class CausalWanModel(ModelMixin, ConfigMixin):
 
         import torch.distributed as dist
         if not dist.is_initialized() or dist.get_rank() == 0:
-            print(
-                f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
+            print(f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
             print(block_mask)
-
-        # import imageio
-        # import numpy as np
-        # from torch.nn.attention.flex_attention import create_mask
-
-        # mask = create_mask(attention_mask, B=None, H=None, Q_LEN=total_length +
-        #                    padded_length, KV_LEN=total_length + padded_length, device=device)
-        # import cv2
-        # mask = cv2.resize(mask[0, 0].cpu().float().numpy(), (1024, 1024))
-        # imageio.imwrite("mask_%d.jpg" % (0), np.uint8(255. * mask))
 
         return block_mask
 
@@ -975,12 +930,6 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         [1 latent frame] [1 latent frame] ... [1 latent frame]
         We use flexattention to construct the attention mask
         """
-        # debug
-        DEBUG = False
-        if DEBUG:
-            num_frames = 9
-            frame_seqlen = 256
-
         total_length = num_frames * frame_seqlen * 2
 
         # we do right padding to get to a multiple of 128
@@ -1039,18 +988,6 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         block_mask = create_block_mask(attention_mask, B=None, H=None, Q_LEN=total_length + padded_length,
                                        KV_LEN=total_length + padded_length, _compile=False, device=device)
 
-        if DEBUG:
-            print(block_mask)
-            import imageio
-            import numpy as np
-            from torch.nn.attention.flex_attention import create_mask
-
-            mask = create_mask(attention_mask, B=None, H=None, Q_LEN=total_length +
-                               padded_length, KV_LEN=total_length + padded_length, device=device)
-            import cv2
-            mask = cv2.resize(mask[0, 0].cpu().float().numpy(), (1024, 1024))
-            imageio.imwrite("mask_%d.jpg" % (0), np.uint8(255. * mask))
-
         return block_mask
 
     @staticmethod
@@ -1098,19 +1035,8 @@ class CausalWanModel(ModelMixin, ConfigMixin):
                                        KV_LEN=total_length + padded_length, _compile=False, device=device)
 
         if not dist.is_initialized() or dist.get_rank() == 0:
-            print(
-                f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
+            print(f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
             print(block_mask)
-
-        # import imageio
-        # import numpy as np
-        # from torch.nn.attention.flex_attention import create_mask
-
-        # mask = create_mask(attention_mask, B=None, H=None, Q_LEN=total_length +
-        #                    padded_length, KV_LEN=total_length + padded_length, device=device)
-        # import cv2
-        # mask = cv2.resize(mask[0, 0].cpu().float().numpy(), (1024, 1024))
-        # imageio.imwrite("mask_%d.jpg" % (0), np.uint8(255. * mask))
 
         return block_mask
 

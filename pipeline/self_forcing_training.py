@@ -110,31 +110,13 @@ class SelfForcingTrainingPipeline:
         )
         output[:, :context_frames] = context_latent
         
-        # Initialize KV and cross-attention caches. 42 frame length.
+        # Initialize KV and cross-attention caches.
         self._initialize_kv_cache(
             batch_size=batch_size, dtype=context_latent.dtype, device=context_latent.device
         )
         self._initialize_crossattn_cache(
             batch_size=batch_size, dtype=context_latent.dtype, device=context_latent.device
         )
-        # Rerun with timestep zero to update the cache
-        # context_timestep = torch.ones_like(timestep) * self.context_noise
-        # add context noise
-        # denoised_pred = self.scheduler.add_noise(
-        #     denoised_pred.flatten(0, 1),
-        #     torch.randn_like(denoised_pred.flatten(0, 1)),
-        #     context_timestep * torch.ones(
-        #         [batch_size * current_num_frames], device=context_latent.device, dtype=torch.long)
-        # ).unflatten(0, denoised_pred.shape[:2])
-        # with torch.no_grad():
-        #     self.generator(
-        #         noisy_image_or_video=denoised_pred,
-        #         conditional_dict=conditional_dict,
-        #         timestep=context_timestep,
-        #         kv_cache=self.kv_cache1,
-        #         crossattn_cache=self.crossattn_cache,
-        #         current_start=current_start_frame * self.frame_seq_length
-        #     )
 
         # --- 2. Context Priming (Always without gradients) ---
         # We never need to backpropagate through the initial context.
@@ -248,34 +230,17 @@ class SelfForcingTrainingPipeline:
             
             # 3.4 Update KV cache (always with no_grad)
             
-            context_timestep = torch.ones(
-                [batch_size, current_num_frames], 
-                device=context_latent.device, 
+            # Re-run with timestep=0 to write clean denoised pred into the KV cache
+            zero_timestep = torch.zeros(
+                [batch_size, current_num_frames],
+                device=context_latent.device,
                 dtype=torch.long
-            ) * self.context_noise * 0
-
-            flat_denoised_pred_for_cache = denoised_pred.detach().flatten(0, 1)
-            timestep_for_cache_update = context_timestep.flatten() # Correctly shaped
-
-            noisy_flat_input_for_cache = self.scheduler.add_noise(
-                flat_denoised_pred_for_cache,
-                torch.randn_like(flat_denoised_pred_for_cache),
-                timestep_for_cache_update
             )
-
-            denoised_pred_for_cache = noisy_flat_input_for_cache.unflatten(0, (batch_size, current_num_frames))
-
-            # denoised_pred_for_cache = self.scheduler.add_noise(
-            #     denoised_pred.detach(), # detach() to cut graph before re-noising for cache
-            #     torch.randn_like(denoised_pred),
-            #     context_timestep * torch.ones(
-            #         [batch_size * current_num_frames], device=context_latent.device, dtype=torch.long)
-            # ).unflatten(0, denoised_pred.shape[:2])
             with torch.no_grad():
                 self.generator(
-                    noisy_image_or_video=denoised_pred_for_cache,
+                    noisy_image_or_video=denoised_pred.detach(),
                     conditional_dict=conditional_dict,
-                    timestep=context_timestep * 0,
+                    timestep=zero_timestep,
                     kv_cache=self.kv_cache1,
                     crossattn_cache=self.crossattn_cache,
                     current_start=current_start_frame * self.frame_seq_length
@@ -354,27 +319,6 @@ class SelfForcingTrainingPipeline:
         self._initialize_crossattn_cache(
             batch_size=batch_size, dtype=noise.dtype, device=noise.device
         )
-        # if self.kv_cache1 is None:
-        #     self._initialize_kv_cache(
-        #         batch_size=batch_size,
-        #         dtype=noise.dtype,
-        #         device=noise.device,
-        #     )
-        #     self._initialize_crossattn_cache(
-        #         batch_size=batch_size,
-        #         dtype=noise.dtype,
-        #         device=noise.device
-        #     )
-        # else:
-        #     # reset cross attn cache
-        #     for block_index in range(self.num_transformer_blocks):
-        #         self.crossattn_cache[block_index]["is_init"] = False
-        #     # reset kv cache
-        #     for block_index in range(len(self.kv_cache1)):
-        #         self.kv_cache1[block_index]["global_end_index"] = torch.tensor(
-        #             [0], dtype=torch.long, device=noise.device)
-        #         self.kv_cache1[block_index]["local_end_index"] = torch.tensor(
-        #             [0], dtype=torch.long, device=noise.device)
 
         # Step 2: Cache context feature
         current_start_frame = 0
@@ -400,8 +344,6 @@ class SelfForcingTrainingPipeline:
         num_denoising_steps = len(self.denoising_step_list)
         exit_flags = self.generate_and_sync_list(len(all_num_frames), num_denoising_steps, device=noise.device)
         start_gradient_frame_index = num_output_frames - self.real_score_length + 3
-
-        print("start_gradient_frame_index", start_gradient_frame_index)
 
         # for block_index in range(num_blocks):
         for block_index, current_num_frames in enumerate(all_num_frames):
@@ -483,52 +425,16 @@ class SelfForcingTrainingPipeline:
                     [batch_size * current_num_frames], device=noise.device, dtype=torch.long)
             ).unflatten(0, denoised_pred.shape[:2])
 
-            # Do KV-ReCache
-            if current_start_frame % self.local_attn_size == 0 and current_start_frame > 0 and False:
-                print(f"Do kv-recache, range:[{current_start_frame + current_num_frames - self.local_attn_size}, {current_start_frame + current_num_frames}]")
-                # Step 2: recompute kv cache
-                context_timestep = torch.ones(
-                    [batch_size, self.local_attn_size],
-                    device=noise.device,
-                    dtype=torch.int64) * 0
-                update_clip = output[:, current_start_frame + current_num_frames - self.local_attn_size:current_start_frame + current_num_frames]
-                
-                sink_cache = None
-                if self.kv_cache1 is not None:
-                    sink_tokens_count = self.sink_size * self.frame_seq_length 
-                    
-                    sink_k = self.kv_cache1["k"][:, :sink_tokens_count].clone()
-                    sink_v = self.kv_cache1["v"][:, :sink_tokens_count].clone()
-                    
-                    sink_end_idx = torch.tensor([sink_tokens_count], dtype=torch.long, device=self.kv_cache1["local_end_index"].device)
-                    
-                    sink_cache = {
-                        "k": sink_k,
-                        "v": sink_v,
-                        "global_end_index": sink_end_idx.clone(), 
-                        "local_end_index": sink_end_idx.clone()   
-                    }
-
-                with torch.no_grad():
-                    _, _, self.kv_cache1 = self.generator(
-                        noisy_image_or_video=update_clip,
-                        conditional_dict=conditional_dict,
-                        timestep=context_timestep,
-                        kv_cache=sink_cache,  
-                        crossattn_cache=self.crossattn_cache,
-                        current_start=(current_start_frame + current_num_frames - self.local_attn_size) * self.frame_seq_length
-                    )
-            else:
-                print(f"Fill the kv, range:[{current_start_frame}, {current_start_frame + current_num_frames}]")
-                with torch.no_grad():
-                    _, _, self.kv_cache1 = self.generator(
-                        noisy_image_or_video=denoised_pred,
-                        conditional_dict=conditional_dict,
-                        timestep=context_timestep,
-                        kv_cache=self.kv_cache1,
-                        crossattn_cache=self.crossattn_cache,
-                        current_start=current_start_frame * self.frame_seq_length
-                    )
+            # Fill the KV cache with the (optionally noisy) denoised prediction
+            with torch.no_grad():
+                _, _, self.kv_cache1 = self.generator(
+                    noisy_image_or_video=denoised_pred,
+                    conditional_dict=conditional_dict,
+                    timestep=context_timestep,
+                    kv_cache=self.kv_cache1,
+                    crossattn_cache=self.crossattn_cache,
+                    current_start=current_start_frame * self.frame_seq_length
+                )
 
             # Step 3.4: update the start and end frame indices
             current_start_frame += current_num_frames
