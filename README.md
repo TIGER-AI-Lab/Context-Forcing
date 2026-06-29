@@ -12,13 +12,17 @@ Extensive results demonstrate that our method enables effective context lengths 
 
 ## Training paradigms for AR video diffusion models
 
-
+<p align="center">
+  <img src="assets/teaser_v1.png" width="100%">
+</p>
 
  (a) Self-forcing: A student matches a teacher capable of generating only 5s video using a 5s self-rollout. (b) Longlive: The student performs long rollouts supervised by a memoryless 5s teacher on random chunks. The teacher's inability to see beyond its 5s window creates a student-teacher mismatch. (c) Context Forcing (Ours): The student is supervised by a long-context teacher aware of the full generation history, resolving the mismatch in (b).
 
 ## Context Forcing and Context Management System
 
-
+<p align="center">
+  <img src="assets/pipeline_v1.png" width="100%">
+</p>
 
  We use KV Cache as the context memory, and we organize it into three parts: sink, slow memory and fast memory. During contextual DMD training, the long teacher provides supervision to the long student by utilizing the same context memory mechanism.
 
