@@ -24,7 +24,7 @@ Extensive results demonstrate that our method enables effective context lengths 
 
 ## Project Updates
 
-- 🔥🔥 News: `2026/6/25`: Training & Inference code, environment setup, and checkpoints released.
+- 🔥🔥 News: `2026/6/29`: Training & Inference code, environment setup, and checkpoints released.
 - 🔥🔥 News: `2026/4/30`: Context Forcing is accepted by ICML2026.
 - 🔥🔥 News: `2026/2/5`: Arxiv paper and project page released.
 
