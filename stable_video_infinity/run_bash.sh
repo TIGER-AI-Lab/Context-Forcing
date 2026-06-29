@@ -1,0 +1,1 @@
+nohup bash svi_long_context.sh > ./logs/1.3B-svi-shot-context-1223.log 2>&1 &
