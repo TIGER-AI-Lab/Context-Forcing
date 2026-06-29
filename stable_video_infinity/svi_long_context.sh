@@ -6,17 +6,17 @@ python -u train_svi_long_context.py \
     --learning_rate 1e-4 \
     --lora_rank 128 \
     --lora_alpha 128 \
-    --dataset_path "/ssd3/shuochen/UltraVideo-Long/clips_long_960,/ssd3/shuochen/Sekai/videos" \
-    --metadata_file_path "/ssd3/shuochen/long_context_filtered_100MB.csv,/ssd3/shuochen/Sekai-Real-HQ-Context_filtered_100MB.csv" \
-    --dit_path "/home/chenshuo/Long_video/wan_models/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors" \
-    --vae_path "/home/chenshuo/Long_video/wan_models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth" \
-    --text_encoder_path "/home/chenshuo/Long_video/wan_models/Wan2.1-T2V-1.3B/models_t5_umt5-xxl-enc-bf16.pth" \
+    --dataset_path "/path/to/video_clips" \
+    --metadata_file_path "/path/to/metadata.csv" \
+    --dit_path "../wan_models/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors" \
+    --vae_path "../wan_models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth" \
+    --text_encoder_path "../wan_models/Wan2.1-T2V-1.3B/models_t5_umt5-xxl-enc-bf16.pth" \
     --max_epochs 10 \
     --train_architecture lora \
     --use_gradient_checkpointing \
     --use_gradient_checkpointing_offload \
     --training_strategy "deepspeed_stage_2" \
-    --output_path "/ssd3/shuochen/logs/experiments/train/svi-shot-context-1.3B-1227" \
+    --output_path "experiments/train/svi-long-context" \
     --use_error_recycling \
     --error_buffer_k 500 \
     --y_error_num 3 \

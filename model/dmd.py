@@ -3,7 +3,6 @@ import torch.nn.functional as F
 from typing import Optional, Tuple
 import torch
 import os
-import gc
 from einops import rearrange
 from torchvision.io import write_video
 
@@ -82,35 +81,6 @@ class DMD(SelfForcingModel):
             self.scheduler.alphas_cumprod = self.scheduler.alphas_cumprod.to(device)
         else:
             self.scheduler.alphas_cumprod = None
-
-    def _clear_cache(self):
-        self.kv_cache_dict = None
-        gc.collect()
-        torch.cuda.empty_cache()
-
-    def optimized_scale(self, positive_flat, negative_flat):
-        """CFG-zero* optimized scale (https://arxiv.org/abs/2503.18886)."""
-        dot_product = torch.sum(positive_flat * negative_flat, dim=1, keepdim=True)
-        squared_norm = torch.sum(negative_flat ** 2, dim=1, keepdim=True) + 1e-8
-        return dot_product / squared_norm
-
-    def _convert_flow_pred_to_x0(
-        self, flow_pred: torch.Tensor, xt: torch.Tensor, timestep: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Convert flow matching prediction to x0.
-        x_t = (1-sigma_t)*x0 + sigma_t*noise  =>  x0 = x_t - sigma_t * flow_pred
-        """
-        original_dtype = flow_pred.dtype
-        flow_pred, xt, sigmas, timesteps = map(
-            lambda x: x.double().to(flow_pred.device),
-            [flow_pred, xt, self.scheduler.sigmas, self.scheduler.timesteps]
-        )
-        timestep_id = torch.argmin(
-            (timesteps.unsqueeze(0) - timestep.unsqueeze(1)).abs(), dim=1)
-        sigma_t = sigmas[timestep_id].reshape(-1, 1, 1, 1)
-        x0_pred = xt - sigma_t * flow_pred
-        return x0_pred.to(original_dtype)
 
     def _compute_kl_grad(
         self,

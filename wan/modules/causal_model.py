@@ -344,7 +344,6 @@ class CausalWanSelfAttention(nn.Module):
                         kv_cache["k"][:, context_token_max_end - self.num_new_context_tokens:context_token_max_end] = raw_key[:, :fill_len, ...]
                         kv_cache["v"][:, context_token_max_end - self.num_new_context_tokens:context_token_max_end] = v[:, :fill_len, ...]
 
-                    # local_end_index_prev += self.num_new_context_tokens
                     shift_src_frame_start = shift_src_start // frame_seqlen
                     shift_dst_frame_start = shift_dst_start // frame_seqlen
                     actual_frame_len = actual_len // frame_seqlen
@@ -584,9 +583,6 @@ class CausalWanSelfAttention(nn.Module):
             new_global_end_index = torch.tensor([current_end], dtype=torch.long, device=kv_cache["global_end_index"].device)
             new_local_end_index = torch.tensor([local_end_index], dtype=torch.long, device=kv_cache["local_end_index"].device)
 
-            # kv_cache["global_end_index"].fill_(current_end)
-            # kv_cache["local_end_index"].fill_(local_end_index)
-
             new_kv_cache = {
                 "k": kv_cache["k"],
                 "v": kv_cache["v"],
@@ -668,10 +664,7 @@ class CausalWanAttentionBlock(nn.Module):
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
         """
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
-        # assert e.dtype == torch.float32
-        # with amp.autocast(dtype=torch.float32):
         e = (self.modulation.unsqueeze(1) + e).chunk(6, dim=2)
-        # assert e[0].dtype == torch.float32
 
         # self-attention
         y, new_kv_cache = self.self_attn(
@@ -679,7 +672,6 @@ class CausalWanAttentionBlock(nn.Module):
             seq_lens, grid_sizes,
             freqs, block_mask, kv_cache, current_start, cache_start, keyframe_sample)
 
-        # with amp.autocast(dtype=torch.float32):
         x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
 
         # cross-attention & ffn function
@@ -690,7 +682,6 @@ class CausalWanAttentionBlock(nn.Module):
                 (self.norm2(x).unflatten(dim=1, sizes=(num_frames,
                  frame_seqlen)) * (1 + e[4]) + e[3]).flatten(1, 2)
             )
-            # with amp.autocast(dtype=torch.float32):
             x = x + (y.unflatten(dim=1, sizes=(num_frames,
                      frame_seqlen)) * e[5]).flatten(1, 2)
             return x
@@ -722,8 +713,6 @@ class CausalHead(nn.Module):
             x(Tensor): Shape [B, L1, C]
             e(Tensor): Shape [B, F, 1, C]
         """
-        # assert e.dtype == torch.float32
-        # with amp.autocast(dtype=torch.float32):
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
         e = (self.modulation.unsqueeze(1) + e).chunk(2, dim=2)
         x = (self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]))
@@ -908,7 +897,6 @@ class CausalWanModel(ModelMixin, ConfigMixin):
                 return (kv_idx < ends[q_idx]) | (q_idx == kv_idx)
             else:
                 return ((kv_idx < ends[q_idx]) & (kv_idx >= (ends[q_idx] - local_attn_size * frame_seqlen))) | (q_idx == kv_idx)
-            # return ((kv_idx < total_length) & (q_idx < total_length))  | (q_idx == kv_idx) # bidirectional mask
 
         block_mask = create_block_mask(attention_mask, B=None, H=None, Q_LEN=total_length + padded_length,
                                        KV_LEN=total_length + padded_length, _compile=False, device=device)
@@ -970,7 +958,6 @@ class CausalWanModel(ModelMixin, ConfigMixin):
             noise_noise_starts[start:end] = start
             noise_noise_ends[start:end] = end
             # attend to context tokens in previous blocks
-            # noise_context_starts[start:end] = 0
             noise_context_ends[start:end] = block_index * attention_block_size
 
         def attention_mask(b, h, q_idx, kv_idx):
@@ -1104,12 +1091,10 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         """
 
         # time embeddings
-        # with amp.autocast(dtype=torch.float32):
         e = self.time_embedding(
             sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
         e0 = self.time_projection(e).unflatten(
             1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
-        # assert e.dtype == torch.float32 and e0.dtype == torch.float32
 
         # context
         context_lens = None
@@ -1257,12 +1242,10 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         ])
 
         # time embeddings
-        # with amp.autocast(dtype=torch.float32):
         e = self.time_embedding(
             sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
         e0 = self.time_projection(e).unflatten(
             1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
-        # assert e.dtype == torch.float32 and e0.dtype == torch.float32
 
         # context
         context_lens = None

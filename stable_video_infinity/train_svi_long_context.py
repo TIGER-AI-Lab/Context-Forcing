@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument(
         "--text_encoder_path",
         type=str,
-        default="/mnt/data/hnqiu/wanx2.1_t2v/WanX2.1-T2V-14B/models_t5_umt5-xxl-enc-bf16.pth",
+        default="../wan_models/Wan2.1-T2V-1.3B/models_t5_umt5-xxl-enc-bf16.pth",
         help="Path of text encoder.",
     )
     parser.add_argument(
@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument(
         "--vae_path",
         type=str,
-        default="/mnt/data/hnqiu/wanx2.1_t2v/WanX2.1-T2V-14B/WanX2.1_VAE.pth",
+        default="../wan_models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth",
         help="Path of VAE.",
     )
     parser.add_argument(

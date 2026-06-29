@@ -1,13 +1,12 @@
 import gc
 import logging
 
-from utils.dataset import ShardingLMDBDataset, cycle
+from utils.dataset import ShardingLMDBDataset
 from utils.dataset import TextDataset
 from utils.dataset import UltraVidDataset
 from utils.distributed import EMA_FSDP, fsdp_wrap, fsdp_state_dict, launch_distributed_job
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler
 from utils.misc import (
     set_seed,
     merge_dict_list
@@ -16,7 +15,6 @@ import torch.distributed as dist
 from omegaconf import OmegaConf
 from model import CausVid, DMD, SiD
 import torch
-import bitsandbytes.optim as bnb_optim
 import wandb
 from tqdm import tqdm 
 import time
@@ -160,7 +158,6 @@ class Trainer:
 
         if dist.get_rank() == 0:
             print("DATASET SIZE %d" % len(dataset))
-        # self.dataloader = cycle(dataloader)
         self.sampler = sampler
         self.dataloader = dataloader
         self.dataloader_iterator = None
@@ -243,10 +240,6 @@ class Trainer:
         if not self.config.teacher_forcing:
             critic_state_dict = fsdp_state_dict(self.model.fake_score)
 
-        # Optimizer and EMA states are not FSDP-managed in the same way,
-        # but we still gather them on all ranks before saving on main.
-        # generator_optimizer_state_dict = self.generator_optimizer.state_dict()
-        
         critic_optimizer_state_dict = None
         if not self.config.teacher_forcing and self.config.save_optimizer:
             critic_optimizer_state_dict = FSDP.optim_state_dict(self.model.fake_score, self.critic_optimizer)
@@ -326,66 +319,8 @@ class Trainer:
     # -------------------- Strength ratios (size-agnostic main: R_rel) --------------------
 
     @torch.no_grad()
-    def compute_strength_ratios(
-        self,
-        G_params,
-        D_params,
-        lr_g: float,
-        lr_d: float,
-        clip_g: float = None,
-        clip_d: float = None,
-        lora_scale: float = 1.0,   # e.g., alpha/r for LoRA (256/128 = 2.0)
-        freq_g: int = 1,
-        freq_d: int = 1,
-        theta_cache: dict | None = None,
-        refresh_theta: bool = False,
-    ):
-        """
-        Compute:
-        - R_rel: size-agnostic relative-step ratio (primary indicator)
-        - R_raw: quick indicator without size normalization
-        Also returns raw/eff grad-norms and ||θ|| for logging.
-
-        Call after backward() and before optimizer.step().
-        """
-        raw_g = self.l2_grad_norm(G_params)
-        raw_d = self.l2_grad_norm(D_params)
-
-        eff_g = raw_g if (clip_g is None or clip_g <= 0) else min(raw_g, clip_g)
-        eff_d = raw_d if (clip_d is None or clip_d <= 0) else min(raw_d, clip_d)
-
-        if theta_cache is None or refresh_theta or ("theta_g" not in theta_cache):
-            theta_g = self.l2_param_norm(G_params)
-            theta_d = self.l2_param_norm(D_params)
-            theta_cache = {"theta_g": theta_g, "theta_d": theta_d}
-        else:
-            theta_g, theta_d = theta_cache["theta_g"], theta_cache["theta_d"]
-
-        # Relative step magnitudes (size-agnostic)
-        rel_g = (eff_g * lr_g * freq_g) / max(1e-12, theta_g)
-        rel_d = (eff_d * lr_d * freq_d * lora_scale) / max(1e-12, theta_d)
-        R_rel = rel_d / max(1e-12, rel_g)
-
-        # Quick pointer (no size normalization)
-        R_raw = (eff_d * lr_d * freq_d * lora_scale) / max(1e-12, eff_g * lr_g * freq_g)
-
-        return {
-            "R_rel": R_rel,
-            "R_raw": R_raw,
-            "raw_g": raw_g,
-            "raw_d": raw_d,
-            "eff_g": eff_g,
-            "eff_d": eff_d,
-            "theta_g": theta_g,
-            "theta_d": theta_d,
-            "theta_cache": theta_cache,
-        }
-
     def fwdbwd_one_step(self, batch, train_generator, accum_steps=1, is_last_micro=True):
         self.model.eval()  # prevent any randomness (e.g. dropout)
-
-        # if self.step % 20 == 0:
-        #     torch.cuda.empty_cache()
 
         # Step 1: prompts
         if self.config.camera_prompt:
@@ -436,7 +371,6 @@ class Trainer:
             else:
                 if accum_steps > 1:
                     generator_loss = generator_loss / accum_steps
-                # torch.cuda.empty_cache()
                 generator_loss.backward()
             gen_loss_cpu = generator_loss.detach().item()
 
