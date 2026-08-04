@@ -91,7 +91,7 @@ generator_score_cpu_offload: false
 return_attn_map: false
 i2v: false
 context_teacher: true
-context_fake: false
+context_fake: true
 context_teacher_path: stable_video_infinity/ckpts/diffusion_pytorch_model.safetensors 
 fake_context_teacher_path: stable_video_infinity/ckpts/diffusion_pytorch_model.safetensors
 camera_prompt: ""
